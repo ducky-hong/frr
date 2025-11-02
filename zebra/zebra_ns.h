@@ -71,6 +71,11 @@ struct zebra_ns {
 	struct nlsock ge_netlink_cmd; /* command channel for generic netlink */
 #endif
 
+#ifdef HAVE_OVS
+	/* OVS backend context */
+	struct ovs_ctx *ovs_ctx;
+#endif
+
 	/* Tree of interfaces in this ns */
 	struct ifp_tree_head ifp_tree;
 
