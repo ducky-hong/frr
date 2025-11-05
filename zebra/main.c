@@ -50,6 +50,8 @@
 #include "zebra/zebra_srte.h"
 #include "zebra/zebra_srv6.h"
 #include "zebra/zebra_srv6_vty.h"
+#include "zebra/zebra_usrspace_provider.h"
+#include "zebra/zebra_usrspace_mock.h"
 
 #define ZEBRA_PTM_SUPPORT
 
@@ -175,6 +177,9 @@ static void sigint(void)
 	zebra_opaque_finish();
 
 	zebra_ptm_finish();
+
+	/* Clean up userspace provider */
+	zebra_usrspace_provider_fini();
 
 	if (retain_mode) {
 		zebra_nhg_mark_keep();
@@ -479,6 +484,11 @@ int main(int argc, char **argv)
 	zebra_rib_init();
 	zebra_if_init();
 	zebra_debug_init();
+
+	/* Initialize userspace provider subsystem */
+	zebra_usrspace_provider_init();
+	zebra_usrspace_mock_init();
+	zebra_usrspace_mock_vty_init();
 
 	/* Open Zebra API server socket */
 	zserv_open(zserv_path);
