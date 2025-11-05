@@ -112,6 +112,9 @@ int zebra_notify_inject(struct zebra_notify_ctx *ctx);
 struct zebra_notify_ctx *zebra_notify_ctx_alloc(void);
 void zebra_notify_ctx_free(struct zebra_notify_ctx **ctx);
 
+/* Start notification polling (call after providers are registered) */
+void zebra_notify_start_poll(void);
+
 /* Cleanup on shutdown */
 void zebra_notify_shutdown(void);
 

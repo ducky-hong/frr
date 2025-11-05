@@ -10,11 +10,13 @@
 #include "lib/memory.h"
 #include "lib/queue.h"
 #include "lib/log.h"
+#include "lib/frrevent.h"
 #include "zebra/zebra_notify.h"
 #include "zebra/zebra_evpn.h"
 #include "zebra/zebra_evpn_mac.h"
 #include "zebra/zebra_evpn_neigh.h"
 #include "zebra/interface.h"
+#include "zebra/zebra_router.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, NOTIFY_CTX, "Notification Context");
 DEFINE_MTYPE_STATIC(ZEBRA, NOTIFY_PROV, "Notification Provider");
@@ -385,6 +387,34 @@ void zebra_notify_poll_providers(void)
 			prov->np_poll(prov);
 		}
 	}
+}
+
+/* Timer for polling notification providers */
+static struct event *notify_poll_timer;
+
+/* Notification poll interval in milliseconds */
+#define NOTIFY_POLL_INTERVAL_MS 100
+
+/* Timer callback to poll notification providers */
+static void zebra_notify_poll_timer(struct event *t)
+{
+	/* Poll all providers */
+	zebra_notify_poll_providers();
+
+	/* Reschedule */
+	event_add_timer_msec(zrouter.master, zebra_notify_poll_timer, NULL,
+			     NOTIFY_POLL_INTERVAL_MS, &notify_poll_timer);
+}
+
+/* Start notification polling */
+void zebra_notify_start_poll(void)
+{
+	/* Schedule first poll */
+	event_add_timer_msec(zrouter.master, zebra_notify_poll_timer, NULL,
+			     NOTIFY_POLL_INTERVAL_MS, &notify_poll_timer);
+
+	zlog_info("Zebra notification polling started (interval=%dms)",
+		  NOTIFY_POLL_INTERVAL_MS);
 }
 
 /* Shutdown notification subsystem */

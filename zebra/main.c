@@ -50,6 +50,8 @@
 #include "zebra/zebra_srte.h"
 #include "zebra/zebra_srv6.h"
 #include "zebra/zebra_srv6_vty.h"
+#include "zebra/zebra_notify.h"
+#include "zebra/notify_userspace.h"
 
 #define ZEBRA_PTM_SUPPORT
 
@@ -545,6 +547,11 @@ int main(int argc, char **argv)
 
 	/* Config handler Init */
 	zebra_evpn_init();
+
+	/* Notification provider init */
+	zebra_notify_init();
+	notify_userspace_init(NULL); /* Use default socket path */
+	zebra_notify_start_poll(); /* Start polling for events */
 
 	/* Error init */
 	zebra_error_init();
