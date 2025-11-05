@@ -1,0 +1,29 @@
+# Makefile for zebra notification provider POC
+# Usage: make -f Makefile.notify_poc
+
+CC = gcc
+CFLAGS = -Wall -Wextra -g -O0
+LDFLAGS =
+
+# Test program
+TEST_PROG = zebra_notify_test
+TEST_SRC = zebra_notify_test.c
+
+all: $(TEST_PROG)
+
+$(TEST_PROG): $(TEST_SRC)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+	@echo ""
+	@echo "Test program built successfully: $(TEST_PROG)"
+	@echo "Run with: ./$(TEST_PROG)"
+	@echo ""
+
+clean:
+	rm -f $(TEST_PROG)
+
+test: $(TEST_PROG)
+	@echo "Running notification provider test..."
+	@echo "Make sure zebra is running with userspace provider enabled"
+	./$(TEST_PROG)
+
+.PHONY: all clean test
