@@ -153,9 +153,9 @@ class UsrspaceProvider:
 
         # Pack the interface event (simplified structure)
         # Format: ifname(16), ifindex(I), mtu(I), flags(I), hw_addr(6), hw_addr_len(I),
-        #         zif_type(I), vrf_id(I), bools(4*I), vni(I), vtep_ip(I), vlan_id(H) + padding
+        #         zif_type(I), vrf_id(I), bools(5*I), vni(I), vtep_ip(I), vlan_id(H) + padding
         data = struct.pack(
-            f"{IFNAMSIZ}sIII{ETH_ALEN}sIIIIIIIIIIH2x",
+            f"{IFNAMSIZ}sIII{ETH_ALEN}sIIIIIIIIIIIH2x",
             ifname_bytes,
             ifindex,
             mtu,
