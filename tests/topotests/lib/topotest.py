@@ -740,9 +740,14 @@ def module_present_linux(module, load):
 
     If `load` is true, it will try to load it via modprobe.
     """
-    with open("/proc/modules", "r") as modules_file:
-        if module.replace("-", "_") in modules_file.read():
-            return True
+    # Workaround for containers without /proc/modules
+    try:
+        with open("/proc/modules", "r") as modules_file:
+            if module.replace("-", "_") in modules_file.read():
+                return True
+    except (FileNotFoundError, PermissionError):
+        # In containers without /proc/modules, skip MPLS checks
+        return False
     cmd = "/sbin/modprobe {}{}".format("" if load else "-n ", module)
     if os.system(cmd) != 0:
         return False
