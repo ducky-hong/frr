@@ -12,12 +12,14 @@
 
 #include <sys/un.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #include "log.h"
 #include "memory.h"
 #include "prefix.h"
 #include "command.h"
 #include "vty.h"
+#include "zebra/debug.h"
 #include "lib_errors.h"
 #include "zebra/zebra_router.h"
 #include "zebra/zebra_errors.h"

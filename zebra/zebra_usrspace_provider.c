@@ -22,6 +22,7 @@
 #include "zebra/zebra_l2.h"
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_evpn_mh.h"
+#include "zebra/debug.h"
 #include "zebra/zebra_usrspace_provider.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, USRSPACE_PROV, "Userspace Provider");
@@ -501,8 +502,8 @@ static int usrspace_process_mac_add(struct usrspace_event *event)
 	if (!mac) {
 		mac = zebra_evpn_mac_add(zevpn, &macaddr);
 		if (!mac) {
-			zlog_err("%s: Failed to add MAC " MACSTR, __func__,
-				 MAC2STR(mev->mac));
+			zlog_err("%s: Failed to add MAC %pEA", __func__,
+				 &macaddr);
 			return -1;
 		}
 	}
@@ -514,14 +515,17 @@ static int usrspace_process_mac_add(struct usrspace_event *event)
 		mac->fwd_info.local.vid = mev->vid;
 
 		if (mev->esi_valid) {
-			memcpy(&mac->esi, &mev->esi, sizeof(esi_t));
-			mac->flags |= ZEBRA_MAC_ES_PEER_ACTIVE;
+			struct zebra_evpn_es *es = zebra_evpn_es_find(&mev->esi);
+			if (es) {
+				mac->es = es;
+				SET_FLAG(mac->flags, ZEBRA_MAC_ES_PEER_ACTIVE);
+			}
 		}
 
 		SET_FLAG(mac->flags, ZEBRA_MAC_LOCAL);
 	} else {
 		/* Remote MAC */
-		mac->fwd_info.r_vtep_ip = mev->ip.ipaddr_v4;
+		mac->fwd_info.r_vtep_ip = mev->ip;
 		UNSET_FLAG(mac->flags, ZEBRA_MAC_LOCAL);
 		SET_FLAG(mac->flags, ZEBRA_MAC_REMOTE);
 	}
@@ -530,8 +534,8 @@ static int usrspace_process_mac_add(struct usrspace_event *event)
 		SET_FLAG(mac->flags, ZEBRA_MAC_STICKY);
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_MAC || IS_ZEBRA_DEBUG_VXLAN)
-		zlog_debug("%s: Added MAC " MACSTR " VNI %u ifindex %u",
-			   __func__, MAC2STR(mev->mac), mev->vni,
+		zlog_debug("%s: Added MAC %pEA VNI %u ifindex %u",
+			   __func__, &macaddr, mev->vni,
 			   mev->ifindex);
 
 	return 0;
@@ -560,14 +564,14 @@ static int usrspace_process_mac_del(struct usrspace_event *event)
 	mac = zebra_evpn_mac_lookup(zevpn, &macaddr);
 	if (!mac) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug("%s: MAC " MACSTR " not found in VNI %u",
-				   __func__, MAC2STR(mev->mac), mev->vni);
+			zlog_debug("%s: MAC %pEA not found in VNI %u",
+				   __func__, &macaddr, mev->vni);
 		return 0;
 	}
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_MAC || IS_ZEBRA_DEBUG_VXLAN)
-		zlog_debug("%s: Deleted MAC " MACSTR " VNI %u", __func__,
-			   MAC2STR(mev->mac), mev->vni);
+		zlog_debug("%s: Deleted MAC %pEA VNI %u", __func__,
+			   &macaddr, mev->vni);
 
 	zebra_evpn_mac_del(zevpn, mac);
 
