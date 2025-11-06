@@ -16,13 +16,16 @@
 #include "zebra/zebra_ns.h"
 #include "zebra/interface.h"
 #include "zebra/zebra_vrf.h"
+#include "zebra/debug.h"
+#include "zebra/ioctl.h"
+#include "zebra/connected.h"
+#include "zebra/zebra_l2.h"
+#include "zebra/zebra_vxlan.h"
+#include "zebra/zebra_vxlan_if.h"
 #include "zebra/zebra_evpn.h"
 #include "zebra/zebra_evpn_mac.h"
 #include "zebra/zebra_evpn_neigh.h"
-#include "zebra/zebra_l2.h"
-#include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_evpn_mh.h"
-#include "zebra/debug.h"
 #include "zebra/zebra_usrspace_provider.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, USRSPACE_PROV, "Userspace Provider");
@@ -186,7 +189,7 @@ void zebra_usrspace_set_enabled(bool enabled)
 
 	} else if (!enabled && prov->started) {
 		/* Stop the provider */
-		EVENT_OFF(prov->t_read);
+		event_cancel(&prov->t_read);
 
 		if (prov->ops->stop)
 			prov->ops->stop(prov);
@@ -260,9 +263,9 @@ static int usrspace_process_intf_add(struct usrspace_event *event)
 
 		if (iev->is_vxlan) {
 			struct zebra_l2info_vxlan *vxl = &zif->l2info.vxl;
-			vxl->vni = iev->vni;
-			vxl->vtep_ip = iev->vtep_ip;
-			zif->brslave_info.br_slave = false;
+			vxl->vni_info.vni.vni = iev->vni;
+			vxl->vtep_ip.ipa_type = IPADDR_V4;
+			vxl->vtep_ip.ipaddr_v4 = iev->vtep_ip;
 		}
 
 		if (iev->is_bridge) {
@@ -275,7 +278,6 @@ static int usrspace_process_intf_add(struct usrspace_event *event)
 			br_if = if_lookup_by_name(iev->bridge_ifname,
 						  event->ns_id);
 			if (br_if) {
-				zif->brslave_info.br_slave = true;
 				zif->brslave_info.bridge_ifindex =
 					br_if->ifindex;
 			}
@@ -292,7 +294,7 @@ static int usrspace_process_intf_add(struct usrspace_event *event)
 	}
 
 	/* Notify zebra core */
-	if_nbr_ipv6ll_to_ipv4ll_neigh_update(ifp, &ifp->ll_ip6, true);
+	if_nbr_ipv6ll_to_ipv4ll_neigh_update(ifp, &zif->v6_2_v4_ll_addr6, true);
 
 	if (IS_ZEBRA_DEBUG_EVENT)
 		zlog_debug("%s: Added interface %s ifindex %u", __func__,

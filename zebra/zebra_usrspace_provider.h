@@ -15,6 +15,7 @@
 #include "prefix.h"
 #include "if.h"
 #include "zebra_dplane.h"
+#include "zebra/interface.h"
 
 #ifdef __cplusplus
 extern "C" {
