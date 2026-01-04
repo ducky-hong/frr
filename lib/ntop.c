@@ -173,6 +173,13 @@ inet4:
 /* we want to override libc inet_ntop, but make sure it shows up in backtraces
  * as frr_inet_ntop (to avoid confusion while debugging)
  */
+#if defined(__APPLE__)
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
+{
+	return frr_inet_ntop(af, src, dst, size);
+}
+#else
 const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
 	__attribute__((alias ("frr_inet_ntop")));
+#endif
 #endif

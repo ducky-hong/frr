@@ -2178,6 +2178,11 @@ bool rtadv_compiled_in(void)
 	return false;
 }
 
+void process_rtadv(void *arg)
+{
+	(void)arg;
+}
+
 #endif /* HAVE_RTADV */
 
 uint32_t rtadv_get_interfaces_configured_from_bgp(void)

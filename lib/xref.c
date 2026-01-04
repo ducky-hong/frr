@@ -21,6 +21,23 @@
 #include "memory.h"
 #include "hash.h"
 
+#if defined(__APPLE__)
+static void *memrchr_frr(const void *s, int c, size_t n)
+{
+	const unsigned char *p = (const unsigned char *)s + n;
+	const unsigned char *start = s;
+
+	while (p != start) {
+		p--;
+		if (*p == (unsigned char)c)
+			return (void *)p;
+	}
+
+	return NULL;
+}
+#define memrchr memrchr_frr
+#endif
+
 struct xref_block *xref_blocks;
 static struct xref_block **xref_block_last = &xref_blocks;
 

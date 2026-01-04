@@ -6,12 +6,19 @@ ZEBRA_TEST_LDADD = zebra/label_manager.o $(ALL_TESTS_LDADD)
 
 if ZEBRA
 check_PROGRAMS += tests/zebra/test_lm_plugin
+check_PROGRAMS += tests/zebra/test_ovs_parse
 endif
 tests_zebra_test_lm_plugin_CFLAGS = $(TESTS_CFLAGS)
 tests_zebra_test_lm_plugin_CPPFLAGS = $(TESTS_CPPFLAGS)
 tests_zebra_test_lm_plugin_LDADD = $(ZEBRA_TEST_LDADD)
 tests_zebra_test_lm_plugin_SOURCES = tests/zebra/test_lm_plugin.c
+tests_zebra_test_ovs_parse_CFLAGS = $(TESTS_CFLAGS)
+tests_zebra_test_ovs_parse_CPPFLAGS = $(TESTS_CPPFLAGS)
+tests_zebra_test_ovs_parse_LDADD = zebra/ovs_parse.o $(ALL_TESTS_LDADD)
+tests_zebra_test_ovs_parse_SOURCES = tests/zebra/test_ovs_parse.c
 EXTRA_DIST += \
 	tests/zebra/test_lm_plugin.py \
 	tests/zebra/test_lm_plugin.refout \
+	tests/zebra/test_ovs_parse.py \
+	tests/zebra/test_ovs_parse.refout \
 	# end

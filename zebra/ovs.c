@@ -23,12 +23,18 @@
 
 #include "zebra/interface.h"
 #include "zebra/ovs.h"
+#include "zebra/ovs_parse.h"
 #include "zebra/zapi_msg.h"
 #include "zebra/zebra_dplane.h"
+#include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_l2.h"
 #include "zebra/zebra_neigh.h"
 #include "zebra/zebra_router.h"
 #include "zebra/zebra_vxlan.h"
+
+#ifndef NUD_REACHABLE
+#define NUD_REACHABLE 0
+#endif
 
 DEFINE_MTYPE_STATIC(ZEBRA, OVS, "Zebra OVS");
 DEFINE_MTYPE_STATIC(ZEBRA, OVS_BUF, "Zebra OVS Buffer");
@@ -661,7 +667,7 @@ void zebra_ovs_interface_list(struct zebra_ns *zns)
 
 	iflist->del = ovs_ifinfo_free;
 	list_delete_all_node(iflist);
-	list_delete_and_null(&iflist);
+	list_delete(&iflist);
 }
 
 void zebra_ovs_interface_list_tunneldump(struct zebra_ns *zns)
@@ -672,39 +678,6 @@ void zebra_ovs_interface_list_tunneldump(struct zebra_ns *zns)
 void zebra_ovs_interface_list_second(struct zebra_ns *zns)
 {
 	(void)zns;
-}
-
-static bool ovs_parse_token(const char *line, const char *key,
-			    char *out, size_t outlen)
-{
-	const char *p;
-	size_t len;
-
-	p = strstr(line, key);
-	if (!p)
-		return false;
-	p += strlen(key);
-	if (*p != '=')
-		return false;
-	p++;
-
-	len = strcspn(p, ", \t\r\n");
-	if (len == 0 || len >= outlen)
-		return false;
-	memcpy(out, p, len);
-	out[len] = '\0';
-	return true;
-}
-
-static int ovs_parse_event_is_del(const char *line)
-{
-	const char *p = strstr(line, "event=");
-
-	if (!p)
-		return 0;
-	if (strstr(p, "DEL") || strstr(p, "delete") || strstr(p, "DELETE"))
-		return 1;
-	return 0;
 }
 
 static void ovs_apply_fdb_entry(const struct ethaddr *mac, uint32_t ofport,
@@ -740,7 +713,7 @@ static void ovs_apply_arp_entry(const struct ipaddr *ip,
 	struct interface *ifp;
 	struct zebra_if *zif;
 	struct interface *br_if;
-	struct sockunion lladdr;
+	union sockunion lladdr;
 	int llalen = 0;
 
 	if (!is_evpn_enabled())
@@ -782,53 +755,30 @@ static void ovs_apply_arp_entry(const struct ipaddr *ip,
 
 static void ovs_handle_fdb_event(const char *line, bool is_del)
 {
-	char macbuf[64];
-	char portbuf[32];
 	struct ethaddr mac;
 	uint32_t ofport;
 
-	if (!ovs_parse_token(line, "dl_dst", macbuf, sizeof(macbuf)))
+	if (!zebra_ovs_parse_fdb_line(line, &mac, &ofport))
 		return;
-	if (!prefix_str2mac(macbuf, &mac))
-		return;
-
-	if (!ovs_parse_token(line, "in_port", portbuf, sizeof(portbuf)))
-		return;
-	ofport = (uint32_t)strtoul(portbuf, NULL, 10);
 
 	ovs_apply_fdb_entry(&mac, ofport, is_del);
 }
 
 static void ovs_handle_arp_event(const char *line, bool is_del)
 {
-	char ipbuf[64];
-	char macbuf[64];
-	char portbuf[32];
 	struct ipaddr ip;
 	struct ethaddr mac;
 	uint32_t ofport;
 
-	if (!ovs_parse_token(line, "arp_tpa", ipbuf, sizeof(ipbuf)))
+	if (!zebra_ovs_parse_arp_line(line, &ip, &mac, &ofport))
 		return;
-	if (str2ipaddr(ipbuf, &ip) != 0)
-		return;
-
-	if (!ovs_parse_token(line, "arp_sha", macbuf, sizeof(macbuf)) &&
-	    !ovs_parse_token(line, "dl_src", macbuf, sizeof(macbuf)))
-		return;
-	if (!prefix_str2mac(macbuf, &mac))
-		return;
-
-	if (!ovs_parse_token(line, "in_port", portbuf, sizeof(portbuf)))
-		return;
-	ofport = (uint32_t)strtoul(portbuf, NULL, 10);
 
 	ovs_apply_arp_entry(&ip, &mac, ofport, is_del);
 }
 
 static void ovs_monitor_line(enum ovs_monitor_type type, const char *line)
 {
-	bool is_del = ovs_parse_event_is_del(line);
+	bool is_del = zebra_ovs_parse_event_is_del(line);
 
 	if (type == OVS_MON_FDB)
 		ovs_handle_fdb_event(line, is_del);
@@ -838,55 +788,37 @@ static void ovs_monitor_line(enum ovs_monitor_type type, const char *line)
 
 static struct ovs_fdb_entry *ovs_parse_fdb_line(const char *line)
 {
-	char macbuf[64];
-	char portbuf[32];
 	struct ovs_fdb_entry *entry;
-	uint32_t ofport;
 
-	if (!ovs_parse_token(line, "dl_dst", macbuf, sizeof(macbuf)))
-		return NULL;
-	if (!ovs_parse_token(line, "in_port", portbuf, sizeof(portbuf)))
-		return NULL;
-
-	ofport = (uint32_t)strtoul(portbuf, NULL, 10);
 	entry = XCALLOC(MTYPE_OVS_KEY, sizeof(*entry));
-	if (!prefix_str2mac(macbuf, &entry->mac)) {
+	if (!zebra_ovs_parse_fdb_line(line, &entry->mac, &entry->ofport)) {
 		XFREE(MTYPE_OVS_KEY, entry);
 		return NULL;
 	}
 
-	entry->ofport = ofport;
-	entry->key = asprintfrr(MTYPE_OVS_KEY, "%s:%u", macbuf, ofport);
+	entry->key = asprintfrr(MTYPE_OVS_KEY, "%pEA:%u", &entry->mac,
+				entry->ofport);
 	return entry;
 }
 
 static struct ovs_arp_entry *ovs_parse_arp_line(const char *line)
 {
-	char ipbuf[64];
 	char macbuf[64];
-	char portbuf[32];
 	struct ovs_arp_entry *entry;
-	uint32_t ofport;
-
-	if (!ovs_parse_token(line, "arp_tpa", ipbuf, sizeof(ipbuf)))
-		return NULL;
-	if (!ovs_parse_token(line, "arp_sha", macbuf, sizeof(macbuf)) &&
-	    !ovs_parse_token(line, "dl_src", macbuf, sizeof(macbuf)))
-		return NULL;
-	if (!ovs_parse_token(line, "in_port", portbuf, sizeof(portbuf)))
-		return NULL;
 
 	entry = XCALLOC(MTYPE_OVS_KEY, sizeof(*entry));
-	if (str2ipaddr(ipbuf, &entry->ip) != 0 ||
-	    !prefix_str2mac(macbuf, &entry->mac)) {
+	if (!zebra_ovs_parse_arp_line(line, &entry->ip, &entry->mac,
+				      &entry->ofport)) {
 		XFREE(MTYPE_OVS_KEY, entry);
 		return NULL;
 	}
 
-	ofport = (uint32_t)strtoul(portbuf, NULL, 10);
-	entry->ofport = ofport;
-	entry->key = asprintfrr(MTYPE_OVS_KEY, "%s:%u:%s", ipbuf, ofport,
-				macbuf);
+	if (!zebra_ovs_parse_token(line, "arp_sha", macbuf, sizeof(macbuf)) &&
+	    !zebra_ovs_parse_token(line, "dl_src", macbuf, sizeof(macbuf)))
+		macbuf[0] = '\0';
+
+	entry->key = asprintfrr(MTYPE_OVS_KEY, "%pIA:%u:%s", &entry->ip,
+				entry->ofport, macbuf);
 	return entry;
 }
 

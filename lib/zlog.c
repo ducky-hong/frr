@@ -38,6 +38,9 @@
 #ifdef __DragonFly__
 #include <sys/lwp.h>
 #endif
+#ifdef __APPLE__
+#include <mach/mach.h>
+#endif
 
 #ifdef HAVE_LIBUNWIND
 #define UNW_LOCAL_ONLY

@@ -104,18 +104,22 @@ int setsockopt_ipv6_pktinfo(int sock, int val)
 {
 	int ret;
 
-#ifdef IPV6_RECVPKTINFO /*2292bis-01*/
+#if defined(IPV6_RECVPKTINFO) /*2292bis-01*/
 	ret = setsockopt(sock, IPPROTO_IPV6, IPV6_RECVPKTINFO, &val,
 			 sizeof(val));
 	if (ret < 0)
 		flog_err(EC_LIB_SOCKET,
 			 "can't setsockopt IPV6_RECVPKTINFO : %s",
 			 safe_strerror(errno));
-#else  /*RFC2292*/
+#elif defined(IPV6_PKTINFO) /*RFC2292*/
 	ret = setsockopt(sock, IPPROTO_IPV6, IPV6_PKTINFO, &val, sizeof(val));
 	if (ret < 0)
 		flog_err(EC_LIB_SOCKET, "can't setsockopt IPV6_PKTINFO : %s",
 			 safe_strerror(errno));
+#else
+	(void)sock;
+	(void)val;
+	ret = 0;
 #endif /* IANA_IPV6 */
 	return ret;
 }
@@ -148,15 +152,19 @@ int setsockopt_ipv6_hoplimit(int sock, int val)
 {
 	int ret;
 
-#ifdef IPV6_RECVHOPLIMIT /*2292bis-01*/
+#if defined(IPV6_RECVHOPLIMIT) /*2292bis-01*/
 	ret = setsockopt(sock, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &val,
 			 sizeof(val));
 	if (ret < 0)
 		flog_err(EC_LIB_SOCKET, "can't setsockopt IPV6_RECVHOPLIMIT");
-#else /*RFC2292*/
+#elif defined(IPV6_HOPLIMIT) /*RFC2292*/
 	ret = setsockopt(sock, IPPROTO_IPV6, IPV6_HOPLIMIT, &val, sizeof(val));
 	if (ret < 0)
 		flog_err(EC_LIB_SOCKET, "can't setsockopt IPV6_HOPLIMIT");
+#else
+	(void)sock;
+	(void)val;
+	ret = 0;
 #endif
 	return ret;
 }
@@ -175,11 +183,16 @@ int setsockopt_ipv6_multicast_loop(int sock, int val)
 
 static int getsockopt_ipv6_ifindex(struct msghdr *msgh)
 {
+#ifdef IPV6_PKTINFO
 	struct in6_pktinfo *pktinfo;
 
 	pktinfo = getsockopt_cmsg_data(msgh, IPPROTO_IPV6, IPV6_PKTINFO);
 
 	return pktinfo->ipi6_ifindex;
+#else
+	(void)msgh;
+	return -1;
+#endif
 }
 
 int setsockopt_ipv6_tclass(int sock, int tclass)
@@ -709,6 +722,7 @@ int setsockopt_tcp_keepalive(int sock, uint16_t keepalive_idle,
 #else
 	/* Send first probe after keepalive_idle seconds */
 	val = keepalive_idle;
+#if defined(TCP_KEEPIDLE)
 	if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &val, sizeof(val)) <
 	    0) {
 		flog_err_sys(EC_LIB_SYSTEM_CALL,
@@ -716,9 +730,19 @@ int setsockopt_tcp_keepalive(int sock, uint16_t keepalive_idle,
 			     __func__, sock, safe_strerror(errno));
 		return -1;
 	}
+#elif defined(TCP_KEEPALIVE)
+	if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPALIVE, &val, sizeof(val)) <
+	    0) {
+		flog_err_sys(EC_LIB_SYSTEM_CALL,
+			     "%s failed: setsockopt TCP_KEEPALIVE (%d): %s",
+			     __func__, sock, safe_strerror(errno));
+		return -1;
+	}
+#endif
 
 	/* Set interval between two probes */
 	val = keepalive_intvl;
+#if defined(TCP_KEEPINTVL)
 	if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &val, sizeof(val)) <
 	    0) {
 		flog_err_sys(EC_LIB_SYSTEM_CALL,
@@ -726,15 +750,18 @@ int setsockopt_tcp_keepalive(int sock, uint16_t keepalive_idle,
 			     __func__, sock, safe_strerror(errno));
 		return -1;
 	}
+#endif
 
 	/* Set maximum probes */
 	val = keepalive_probes;
+#if defined(TCP_KEEPCNT)
 	if (setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &val, sizeof(val)) < 0) {
 		flog_err_sys(EC_LIB_SYSTEM_CALL,
 			     "%s failed: setsockopt TCP_KEEPCNT (%d): %s",
 			     __func__, sock, safe_strerror(errno));
 		return -1;
 	}
+#endif
 
 	return 0;
 #endif

@@ -1,0 +1,13 @@
+token in_port ok=1 value=5
+token dl_dst ok=1 value=aa:bb:cc:dd:ee:ff
+token actions ok=1 value=drop
+token missing ok=0 value=-
+event DEL del=1
+event delete del=1
+event ADD del=0
+event none del=0
+fdb ok ok=1 mac=00:11:22:33:44:55 port=10
+fdb missing ok=0 mac=- port=0
+arp v4 ok=1 ip=192.0.2.1 mac=aa:bb:cc:dd:ee:ff port=7
+arp v6 ok=1 ip=2001:db8::1 mac=01:02:03:04:05:06 port=3
+arp missing-port ok=0 ip=- mac=- port=0
