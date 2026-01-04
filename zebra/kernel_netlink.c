@@ -40,6 +40,7 @@
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_errors.h"
 #include "zebra/ge_netlink.h"
+#include "zebra/ovs.h"
 
 #ifndef SO_RCVBUFFORCE
 #define SO_RCVBUFFORCE  (33)
@@ -1661,6 +1662,11 @@ static enum netlink_msg_status nl_put_msg(struct nl_batch *bth,
 
 void kernel_update_multi(struct dplane_ctx_list_head *ctx_list)
 {
+	if (zebra_ovs_is_enabled()) {
+		zebra_ovs_update_multi(ctx_list);
+		return;
+	}
+
 	struct nl_batch batch;
 	struct zebra_dplane_ctx *ctx;
 	struct dplane_ctx_list_head handled_list;
@@ -1752,6 +1758,11 @@ static bool kernel_netlink_nlsock_hash_equal(const void *arg1, const void *arg2)
    netlink_socket (). */
 void kernel_init(struct zebra_ns *zns)
 {
+	if (zebra_ovs_is_enabled()) {
+		zebra_ovs_init(zns);
+		return;
+	}
+
 	uint32_t groups, dplane_groups, ext_groups;
 #if defined SOL_NETLINK
 	int one, ret, grp;
@@ -1983,6 +1994,11 @@ static void kernel_nlsock_fini(struct nlsock *nls)
 
 void kernel_terminate(struct zebra_ns *zns, bool complete)
 {
+	if (zebra_ovs_is_enabled()) {
+		zebra_ovs_terminate(zns);
+		return;
+	}
+
 	EVENT_OFF(zns->t_netlink);
 
 	kernel_nlsock_fini(&zns->netlink);

@@ -26,6 +26,7 @@
 #include "zebra/zebra_pbr.h"
 #include "zebra/zebra_neigh.h"
 #include "zebra/zebra_tc.h"
+#include "zebra/ovs.h"
 #include "printfrr.h"
 
 /* Memory types */
@@ -6514,6 +6515,9 @@ static void dplane_kernel_info_request(struct dplane_zns_info *zi)
 void zebra_dplane_ns_enable(struct zebra_ns *zns, bool enabled)
 {
 	struct dplane_zns_info *zi;
+
+	if (zebra_ovs_is_enabled())
+		return;
 
 	if (IS_ZEBRA_DEBUG_DPLANE)
 		zlog_debug("%s: %s for nsid %u", __func__,

@@ -19,6 +19,7 @@ FRRouting Developer's Guide
    grpc
    ospf
    zebra
+   zebra-ovs
    vtysh
    path
    pceplib

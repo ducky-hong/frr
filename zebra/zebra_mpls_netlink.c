@@ -16,6 +16,7 @@
 #include "zebra/rt_netlink.h"
 #include "zebra/zebra_mpls.h"
 #include "zebra/kernel_netlink.h"
+#include "zebra/ovs.h"
 
 ssize_t netlink_lsp_msg_encoder(struct zebra_dplane_ctx *ctx, void *buf,
 				size_t buflen)
@@ -64,6 +65,9 @@ enum netlink_msg_status netlink_put_pw_update_msg(struct nl_batch *bth,
 int mpls_kernel_init(void)
 {
 	struct stat st;
+
+	if (zebra_ovs_is_enabled())
+		return 0;
 
 	/*
 	 * Check if the MPLS module is loaded in the kernel.

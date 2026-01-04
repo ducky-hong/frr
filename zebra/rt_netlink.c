@@ -67,6 +67,7 @@
 #include "zebra/zebra_trace.h"
 #include "zebra/zebra_neigh.h"
 #include "lib/srv6.h"
+#include "zebra/ovs.h"
 
 #ifndef AF_MPLS
 #define AF_MPLS 28
@@ -3764,6 +3765,9 @@ int netlink_nexthop_read(struct zebra_ns *zns)
 int kernel_neigh_update(int add, int ifindex, void *addr, char *lla, int llalen,
 			ns_id_t ns_id, uint8_t family, bool permanent)
 {
+	if (zebra_ovs_is_enabled())
+		return 0;
+
 	return netlink_neigh_update(add ? RTM_NEWNEIGH : RTM_DELNEIGH, ifindex,
 				    addr, lla, llalen, ns_id, family, permanent,
 				    RTPROT_ZEBRA);
@@ -5353,22 +5357,34 @@ static int netlink_fdb_nhg_del(uint32_t nhg_id)
 
 int kernel_upd_mac_nh(uint32_t nh_id, struct in_addr vtep_ip)
 {
+	if (zebra_ovs_is_enabled())
+		return 0;
+
 	return netlink_fdb_nh_update(nh_id, vtep_ip);
 }
 
 int kernel_del_mac_nh(uint32_t nh_id)
 {
+	if (zebra_ovs_is_enabled())
+		return 0;
+
 	return netlink_fdb_nh_del(nh_id);
 }
 
 int kernel_upd_mac_nhg(uint32_t nhg_id, uint32_t nh_cnt,
 		struct nh_grp *nh_ids)
 {
+	if (zebra_ovs_is_enabled())
+		return 0;
+
 	return netlink_fdb_nhg_update(nhg_id, nh_cnt, nh_ids);
 }
 
 int kernel_del_mac_nhg(uint32_t nhg_id)
 {
+	if (zebra_ovs_is_enabled())
+		return 0;
+
 	return netlink_fdb_nhg_del(nhg_id);
 }
 

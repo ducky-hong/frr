@@ -63,6 +63,7 @@
 #include "zebra/zebra_l2.h"
 #include "zebra/netconf_netlink.h"
 #include "zebra/zebra_trace.h"
+#include "zebra/ovs.h"
 
 extern struct zebra_privs_t zserv_privs;
 
@@ -843,6 +844,13 @@ void interface_list_tunneldump(struct zebra_ns *zns)
 {
 	int ret;
 
+	if (zebra_ovs_is_enabled()) {
+		zebra_ovs_interface_list_tunneldump(zns);
+		zebra_dplane_startup_stage(zns,
+					   ZEBRA_DPLANE_TUNNELS_READ);
+		return;
+	}
+
 	/*
 	 * So netlink_tunneldump_read will initiate a request
 	 * per tunnel to get data.  If we are on a kernel that
@@ -1523,6 +1531,13 @@ ssize_t netlink_intf_msg_encode(uint16_t cmd,
 /* Interface information read by netlink. */
 void interface_list(struct zebra_ns *zns)
 {
+	if (zebra_ovs_is_enabled()) {
+		zebra_ovs_interface_list(zns);
+		zebra_dplane_startup_stage(zns,
+					   ZEBRA_DPLANE_INTERFACES_READ);
+		return;
+	}
+
 	interface_lookup_netlink(zns);
 
 	zebra_dplane_startup_stage(zns, ZEBRA_DPLANE_INTERFACES_READ);
@@ -1530,6 +1545,13 @@ void interface_list(struct zebra_ns *zns)
 
 void interface_list_second(struct zebra_ns *zns)
 {
+	if (zebra_ovs_is_enabled()) {
+		zebra_ovs_interface_list_second(zns);
+		zebra_dplane_startup_stage(zns,
+					   ZEBRA_DPLANE_ADDRESSES_READ);
+		return;
+	}
+
 	zebra_if_update_all_links(zns);
 	/* We add routes for interface address,
 	 * so we need to get the nexthop info

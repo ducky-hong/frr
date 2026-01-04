@@ -29,6 +29,7 @@
 #include "zebra/interface.h"
 #include "zebra/zebra_mpls.h"
 #include "zebra/zebra_vxlan.h"
+#include "zebra/ovs.h"
 #include "zebra/zebra_netns_notify.h"
 #include "zebra/zebra_routemap.h"
 #include "zebra/zebra_vrf_clippy.c"
@@ -132,6 +133,15 @@ static int zebra_vrf_enable(struct vrf *vrf)
 		zvrf->zns = zebra_ns_lookup((ns_id_t)vrf->vrf_id);
 	else
 		zvrf->zns = zebra_ns_lookup(NS_DEFAULT);
+
+	if (zebra_ovs_is_enabled()) {
+		if (vrf->vrf_id != VRF_DEFAULT)
+			zlog_warn("OVS backend uses default-only VRF; ignoring VRF %s(%u)",
+				  vrf->name, vrf->vrf_id);
+		if (zvrf->zns && zvrf->zns->ns_id != NS_DEFAULT)
+			zlog_warn("OVS backend uses default-only namespace; ignoring ns %u",
+				  zvrf->zns->ns_id);
+	}
 
 	rtadv_vrf_init(zvrf);
 

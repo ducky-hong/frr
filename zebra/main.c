@@ -51,6 +51,7 @@
 #include "zebra/zebra_srte.h"
 #include "zebra/zebra_srv6.h"
 #include "zebra/zebra_srv6_vty.h"
+#include "zebra/ovs.h"
 
 #define ZEBRA_PTM_SUPPORT
 
@@ -80,6 +81,11 @@ uint32_t rt_table_main_id = RT_TABLE_MAIN;
 #define OPTION_V6_RR_SEMANTICS 2000
 #define OPTION_ASIC_OFFLOAD    2001
 #define OPTION_V6_WITH_V4_NEXTHOP 2002
+#define OPTION_OVS_ENABLE      2100
+#define OPTION_OVS_FDB_BRIDGE  2101
+#define OPTION_OVS_ARP_BRIDGE  2102
+#define OPTION_OVS_OFCTL       2103
+#define OPTION_OVS_POLL        2104
 
 /* Command line options. */
 const struct option longopts[] = {
@@ -95,6 +101,11 @@ const struct option longopts[] = {
 	{ "nl-bufsize", required_argument, NULL, 's' },
 	{ "v6-rr-semantics", no_argument, NULL, OPTION_V6_RR_SEMANTICS },
 #endif /* HAVE_NETLINK */
+	{ "ovs", no_argument, NULL, OPTION_OVS_ENABLE },
+	{ "ovs-fdb-bridge", required_argument, NULL, OPTION_OVS_FDB_BRIDGE },
+	{ "ovs-arp-bridge", required_argument, NULL, OPTION_OVS_ARP_BRIDGE },
+	{ "ovs-ofctl", required_argument, NULL, OPTION_OVS_OFCTL },
+	{ "ovs-poll-interval", required_argument, NULL, OPTION_OVS_POLL },
 	{ "routing-table", optional_argument, NULL, 'R' },
 	{ 0 }
 };
@@ -382,6 +393,11 @@ int main(int argc, char **argv)
 #else
 		    "  -s,                       Set kernel socket receive buffer size\n"
 #endif /* HAVE_NETLINK */
+		    "      --ovs                 Enable OVS backend\n"
+		    "      --ovs-fdb-bridge NAME OVS bridge for FDB flows\n"
+		    "      --ovs-arp-bridge NAME OVS bridge for ARP flows\n"
+		    "      --ovs-ofctl PATH      Path to ovs-ofctl binary\n"
+		    "      --ovs-poll-interval N Poll interval (seconds) for dump-flows\n"
 		    "  -R, --routing-table       Set kernel routing table\n");
 
 	while (1) {
@@ -456,6 +472,26 @@ int main(int argc, char **argv)
 			v6_with_v4_nexthop = true;
 			break;
 #endif /* HAVE_NETLINK */
+		case OPTION_OVS_ENABLE:
+			zebra_ovs_set_enabled(true);
+			break;
+		case OPTION_OVS_FDB_BRIDGE:
+			zebra_ovs_set_enabled(true);
+			zebra_ovs_set_fdb_bridge(optarg);
+			break;
+		case OPTION_OVS_ARP_BRIDGE:
+			zebra_ovs_set_enabled(true);
+			zebra_ovs_set_arp_bridge(optarg);
+			break;
+		case OPTION_OVS_OFCTL:
+			zebra_ovs_set_enabled(true);
+			zebra_ovs_set_ofctl_path(optarg);
+			break;
+		case OPTION_OVS_POLL:
+			zebra_ovs_set_enabled(true);
+			zebra_ovs_set_poll_interval(
+				(uint32_t)strtoul(optarg, NULL, 10));
+			break;
 		default:
 			frr_help_exit(1);
 		}

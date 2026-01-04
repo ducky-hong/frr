@@ -55,6 +55,7 @@ zebra_zebra_SOURCES = \
 	zebra/label_manager.c \
 	zebra/main.c \
 	zebra/netconf_netlink.c \
+	zebra/ovs.c \
 	zebra/redistribute.c \
 	zebra/router-id.c \
 	zebra/rt_netlink.c \
