@@ -33,6 +33,7 @@ void zebra_ovs_interface_list_tunneldump(struct zebra_ns *zns);
 void zebra_ovs_interface_list_second(struct zebra_ns *zns);
 
 void zebra_ovs_update_multi(struct dplane_ctx_list_head *ctx_list);
+int zebra_ovs_dplane_register(void);
 
 #ifdef __cplusplus
 }

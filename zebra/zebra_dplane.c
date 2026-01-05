@@ -7025,6 +7025,11 @@ static int kernel_dplane_process_func(struct zebra_dplane_provider *prov)
 		if (IS_ZEBRA_DEBUG_DPLANE_DETAIL)
 			kernel_dplane_log_detail(ctx);
 
+		if (dplane_ctx_is_skip_kernel(ctx)) {
+			dplane_ctx_list_add_tail(&work_list, ctx);
+			continue;
+		}
+
 		if ((dplane_ctx_get_op(ctx) == DPLANE_OP_IPTABLE_ADD
 		     || dplane_ctx_get_op(ctx) == DPLANE_OP_IPTABLE_DELETE))
 			kernel_dplane_process_iptable(prov, ctx);
@@ -7160,6 +7165,10 @@ static int test_dplane_shutdown_func(struct zebra_dplane_provider *prov,
 static void dplane_provider_init(void)
 {
 	int ret;
+
+	ret = zebra_ovs_dplane_register();
+	if (ret != AOK)
+		zlog_err("Unable to register OVS dplane provider: %d", ret);
 
 	ret = dplane_provider_register("Kernel", DPLANE_PRIO_KERNEL,
 				       DPLANE_PROV_FLAGS_DEFAULT, NULL,

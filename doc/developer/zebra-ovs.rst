@@ -27,9 +27,9 @@ Plan (Minimal-Change Integration)
 ---------------------------------
 1. Add an OVS configuration module and CLI flags:
    ``--ovs-fdb-bridge``, ``--ovs-arp-bridge``, and ``--ovs-poll-interval``.
-2. In Linux builds, gate existing kernel entry points on OVS enablement:
-   ``kernel_init()``, ``kernel_terminate()``, ``kernel_update_multi()``,
-   ``interface_list()`` and route/neighbor reads.
+2. Register an OVS dataplane provider (pre-kernel) to consume dplane updates,
+   mark them "skip-kernel", and keep the kernel provider isolated; disable
+   ``kernel_init()``/``kernel_terminate()`` when OVS is enabled.
 3. Implement interface discovery via ``ovs-vsctl``:
    build ``struct interface`` objects, set ``ifindex`` (from
    ``external_ids:zebra.ifindex`` or ``ofport``), and map bridge membership.
@@ -100,9 +100,26 @@ The following keys are expected when OVS metadata is incomplete:
 - ``zebra.admin_state`` / ``zebra.link_state``: state overrides.
 - ``zebra.desc``: interface description.
 
+EVPN-MH and VxLAN metadata (OVS-specific):
+
+- ``zebra.esi``: Ethernet Segment Identifier (type-0 string) for a bond-
+  equivalent access port. Presence implies bond semantics.
+- ``zebra.bond``: bond master name or ifindex for a bond member (access port).
+- ``zebra.vni``: VNI for a dummy VxLAN interface (per-VNI model).
+- ``zebra.vtep_ip``: local VTEP IP for the dummy VxLAN interface.
+- ``zebra.mcast_grp``: optional multicast group for VNI.
+- ``zebra.access_vlan``: VLAN id used to bind access BD; must match between
+  the bond (ES) and VxLAN interface.
+
 Flow Format (Placeholder)
 -------------------------
 The initial flow format is intentionally simple and should be adjusted later.
+
+EVPN-MH VxLAN Stub
+------------------
+EVPN-MH logic in zebra expects a VxLAN interface to exist. For OVS this can be
+a dummy ``type=vxlan`` port (not used for packet forwarding) with the
+``zebra.vni`` and ``zebra.vtep_ip`` external IDs populated.
 
 FDB (MAC) flow example:
 
@@ -124,4 +141,3 @@ Default-Only VRF/Namespace
 OVS has no VRF/namespace concept. Zebra continues to use the default VRF and
 default namespace. Any non-default VRF/NS activation is allowed but logged with
 a warning.
-

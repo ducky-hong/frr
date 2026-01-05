@@ -5,6 +5,7 @@
 
 #include "zebra.h"
 
+#include <arpa/inet.h>
 #include <string.h>
 
 #include "zebra/ovs_parse.h"
@@ -87,4 +88,44 @@ bool zebra_ovs_parse_arp_line(const char *line, struct ipaddr *ip,
 
 	*ofport = (uint32_t)strtoul(portbuf, NULL, 10);
 	return true;
+}
+
+bool zebra_ovs_parse_vni(const char *value, vni_t *vni)
+{
+	char *endptr = NULL;
+	unsigned long vni_ul;
+
+	if (!value || !vni)
+		return false;
+
+	vni_ul = strtoul(value, &endptr, 10);
+	if (!endptr || *endptr != '\0' || vni_ul == 0 || vni_ul > VNI_MAX)
+		return false;
+
+	*vni = (vni_t)vni_ul;
+	return true;
+}
+
+bool zebra_ovs_parse_vlan(const char *value, vlanid_t *vid)
+{
+	char *endptr = NULL;
+	unsigned long vid_ul;
+
+	if (!value || !vid)
+		return false;
+
+	vid_ul = strtoul(value, &endptr, 10);
+	if (!endptr || *endptr != '\0' || vid_ul == 0 || vid_ul > VLANID_MAX)
+		return false;
+
+	*vid = (vlanid_t)vid_ul;
+	return true;
+}
+
+bool zebra_ovs_parse_ipv4(const char *value, struct in_addr *addr)
+{
+	if (!value || !addr)
+		return false;
+
+	return inet_pton(AF_INET, value, addr) == 1;
 }

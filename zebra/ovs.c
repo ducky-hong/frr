@@ -89,12 +89,24 @@ struct ovs_ifinfo {
 	char *name;
 	char *bridge_name;
 	char *mac;
+	char *bond_master;
+	char *esi;
 	int64_t ofport;
 	int64_t ifindex;
 	int64_t mtu;
 	bool admin_up;
 	bool link_up;
 	bool is_bridge;
+	bool is_vxlan;
+	bool is_bond;
+	bool has_vni;
+	bool has_vtep_ip;
+	bool has_mcast_grp;
+	bool has_access_vlan;
+	vni_t vni;
+	vlanid_t access_vlan;
+	struct in_addr vtep_ip;
+	struct in_addr mcast_grp;
 };
 
 static struct ovs_config ovs_cfg = {
@@ -393,12 +405,13 @@ static struct list *ovs_query_interfaces(void)
 	int idx_admin = -1;
 	int idx_link = -1;
 	int idx_ext = -1;
+	int idx_type = -1;
 	int i;
 
 	char *const argv[] = {
 		"ovs-vsctl",
 		"--format=json",
-		"--columns=name,ofport,mac_in_use,mtu,admin_state,link_state,external_ids",
+		"--columns=name,ofport,mac_in_use,mtu,admin_state,link_state,external_ids,type",
 		"list",
 		"Interface",
 		NULL,
@@ -437,6 +450,8 @@ static struct list *ovs_query_interfaces(void)
 			idx_link = i;
 		else if (strcmp(h, "external_ids") == 0)
 			idx_ext = i;
+		else if (strcmp(h, "type") == 0)
+			idx_type = i;
 	}
 
 	if (idx_name < 0 || idx_ofport < 0 || idx_ext < 0)
@@ -457,6 +472,13 @@ static struct list *ovs_query_interfaces(void)
 		const char *ext_admin;
 		const char *ext_link;
 		const char *ext_bridge;
+		const char *ext_bond;
+		const char *ext_esi;
+		const char *ext_vni;
+		const char *ext_vtep;
+		const char *ext_mcast;
+		const char *ext_access_vlan;
+		const char *type;
 		struct json_object *ext;
 
 		if (!row || !json_object_is_type(row, json_type_array))
@@ -477,6 +499,10 @@ static struct list *ovs_query_interfaces(void)
 		admin = ovs_json_string(
 			json_object_array_get_idx(row, idx_admin));
 		link = ovs_json_string(json_object_array_get_idx(row, idx_link));
+		type = idx_type >= 0
+			       ? ovs_json_string(json_object_array_get_idx(
+					 row, idx_type))
+			       : NULL;
 
 		ext = json_object_array_get_idx(row, idx_ext);
 		ext_ifindex = ovs_map_get_string(ext, "zebra.ifindex");
@@ -485,6 +511,12 @@ static struct list *ovs_query_interfaces(void)
 		ext_admin = ovs_map_get_string(ext, "zebra.admin_state");
 		ext_link = ovs_map_get_string(ext, "zebra.link_state");
 		ext_bridge = ovs_map_get_string(ext, "zebra.bridge");
+		ext_bond = ovs_map_get_string(ext, "zebra.bond");
+		ext_esi = ovs_map_get_string(ext, "zebra.esi");
+		ext_vni = ovs_map_get_string(ext, "zebra.vni");
+		ext_vtep = ovs_map_get_string(ext, "zebra.vtep_ip");
+		ext_mcast = ovs_map_get_string(ext, "zebra.mcast_grp");
+		ext_access_vlan = ovs_map_get_string(ext, "zebra.access_vlan");
 
 		if (ext_ifindex)
 			info->ifindex = strtoll(ext_ifindex, NULL, 10);
@@ -511,6 +543,27 @@ static struct list *ovs_query_interfaces(void)
 			info->bridge_name = XSTRDUP(MTYPE_OVS, ext_bridge);
 
 		info->is_bridge = (strncmp(info->name, "B_", 2) == 0);
+		if (type && strcmp(type, "vxlan") == 0)
+			info->is_vxlan = true;
+		if (ext_vni || ext_vtep || ext_mcast || ext_access_vlan)
+			info->is_vxlan = true;
+		if (ext_esi && ext_esi[0]) {
+			info->esi = XSTRDUP(MTYPE_OVS, ext_esi);
+			info->is_bond = true;
+		}
+		if (ext_bond && ext_bond[0]) {
+			info->bond_master = XSTRDUP(MTYPE_OVS, ext_bond);
+		}
+		if (ext_vni && zebra_ovs_parse_vni(ext_vni, &info->vni))
+			info->has_vni = true;
+		if (ext_access_vlan &&
+		    zebra_ovs_parse_vlan(ext_access_vlan, &info->access_vlan))
+			info->has_access_vlan = true;
+		if (ext_vtep && zebra_ovs_parse_ipv4(ext_vtep, &info->vtep_ip))
+			info->has_vtep_ip = true;
+		if (ext_mcast &&
+		    zebra_ovs_parse_ipv4(ext_mcast, &info->mcast_grp))
+			info->has_mcast_grp = true;
 
 		listnode_add(iflist, info);
 	}
@@ -532,6 +585,8 @@ static void ovs_ifinfo_free(void *arg)
 	XFREE(MTYPE_OVS, info->name);
 	XFREE(MTYPE_OVS, info->bridge_name);
 	XFREE(MTYPE_OVS, info->mac);
+	XFREE(MTYPE_OVS, info->bond_master);
+	XFREE(MTYPE_OVS, info->esi);
 	XFREE(MTYPE_OVS, info);
 }
 
@@ -566,6 +621,12 @@ static void ovs_apply_ifinfo(struct zebra_ns *zns, struct ovs_ifinfo *info)
 	struct interface *br_if = NULL;
 	uint8_t macbuf[INTERFACE_HWADDR_MAX];
 	int maclen = 0;
+	enum zebra_iftype old_type;
+	enum zebra_iftype new_type;
+	enum zebra_slave_iftype old_slave;
+	enum zebra_slave_iftype new_slave;
+	ifindex_t old_bridge_ifindex;
+	ifindex_t old_bond_ifindex;
 
 	if (!info || !info->name)
 		return;
@@ -599,18 +660,127 @@ static void ovs_apply_ifinfo(struct zebra_ns *zns, struct ovs_ifinfo *info)
 	if (!zif)
 		return;
 
+	old_type = zif->zif_type;
+	old_slave = zif->zif_slave_type;
+	old_bridge_ifindex = zif->brslave_info.bridge_ifindex;
+	old_bond_ifindex = zif->bondslave_info.bond_ifindex;
+
+	if (info->is_bridge)
+		new_type = ZEBRA_IF_BRIDGE;
+	else if (info->is_vxlan)
+		new_type = ZEBRA_IF_VXLAN;
+	else if (info->is_bond)
+		new_type = ZEBRA_IF_BOND;
+	else
+		new_type = ZEBRA_IF_OTHER;
+
+	if (old_type != new_type) {
+		if (old_type == ZEBRA_IF_BRIDGE)
+			zebra_l2_bridge_del(ifp);
+		else if (old_type == ZEBRA_IF_VXLAN)
+			zebra_l2_vxlanif_del(ifp);
+		else if (old_type == ZEBRA_IF_BOND)
+			zebra_l2if_update_bond(ifp, false);
+	}
+
+	zif->zif_type = new_type;
+
+	new_slave = ZEBRA_IF_SLAVE_NONE;
+	if (info->bond_master && info->bond_master[0])
+		new_slave = ZEBRA_IF_SLAVE_BOND;
+	else if (info->bridge_name && info->bridge_name[0])
+		new_slave = ZEBRA_IF_SLAVE_BRIDGE;
+	zif->zif_slave_type = new_slave;
+
 	if (info->is_bridge) {
-		if (zif->zif_type != ZEBRA_IF_BRIDGE) {
-			zif->zif_type = ZEBRA_IF_BRIDGE;
-			zebra_evpn_if_init(zif);
-		}
+		zebra_evpn_if_init(zif);
 		memset(&brinfo, 0, sizeof(brinfo));
 		brinfo.bridge.vlan_aware = 0;
 		zebra_l2_bridge_add_update(ifp, &brinfo);
 		return;
 	}
 
-	zif->zif_slave_type = ZEBRA_IF_SLAVE_BRIDGE;
+	if (new_type == ZEBRA_IF_VXLAN) {
+		struct zebra_l2info_vxlan vxl_info;
+		bool add = (old_type != ZEBRA_IF_VXLAN);
+
+		if (!info->has_vni) {
+			zlog_warn("OVS vxlan interface %s missing zebra.vni",
+				  info->name);
+		} else {
+			memset(&vxl_info, 0, sizeof(vxl_info));
+			vxl_info.vni_info.iftype = ZEBRA_VXLAN_IF_VNI;
+			vxl_info.vni_info.vni.vni = info->vni;
+			if (info->has_access_vlan)
+				vxl_info.vni_info.vni.access_vlan =
+					info->access_vlan;
+			if (info->has_mcast_grp)
+				vxl_info.vni_info.vni.mcast_grp =
+					info->mcast_grp;
+			if (info->has_vtep_ip)
+				vxl_info.vtep_ip = info->vtep_ip;
+
+			zebra_l2_vxlanif_add_update(ifp, &vxl_info, add);
+
+			if (!add && info->has_access_vlan &&
+			    zif->l2info.vxl.vni_info.vni.access_vlan !=
+				    info->access_vlan)
+				zebra_l2_vxlanif_update_access_vlan(
+					ifp, info->access_vlan);
+
+			if (!info->has_vtep_ip)
+				zlog_warn(
+					"OVS vxlan interface %s missing zebra.vtep_ip",
+					info->name);
+			if (!info->has_access_vlan)
+				zlog_warn(
+					"OVS vxlan interface %s missing zebra.access_vlan",
+					info->name);
+		}
+	}
+
+	if (new_type == ZEBRA_IF_BOND) {
+		zebra_l2if_update_bond(ifp, old_type != ZEBRA_IF_BOND);
+		zebra_evpn_if_init(zif);
+		if (info->esi && info->esi[0]) {
+			esi_t esi;
+
+			if (str_to_esi(info->esi, &esi))
+				zebra_evpn_es_type0_esi_update(zif, &esi);
+			else
+				zlog_warn(
+					"OVS bond %s has invalid zebra.esi '%s'",
+					info->name, info->esi);
+		} else {
+			zebra_evpn_es_type0_esi_update(zif, NULL);
+		}
+
+	}
+
+	if (info->bond_master && info->bond_master[0]) {
+		char *endptr = NULL;
+		unsigned long bond_ifindex =
+			strtoul(info->bond_master, &endptr, 10);
+
+		if (endptr && *endptr == '\0') {
+			zebra_l2if_update_bond_slave(
+				ifp, (ifindex_t)bond_ifindex, false);
+		} else {
+			struct interface *bond_if = if_lookup_by_name_per_ns(
+				zns, info->bond_master);
+
+			if (bond_if)
+				zebra_l2if_update_bond_slave(
+					ifp, bond_if->ifindex, false);
+			else
+				zebra_l2if_update_bond_slave(
+					ifp, IFINDEX_INTERNAL, false);
+		}
+	} else if (old_slave == ZEBRA_IF_SLAVE_BOND &&
+		   old_bond_ifindex != IFINDEX_INTERNAL) {
+		zebra_l2if_update_bond_slave(ifp, IFINDEX_INTERNAL, false);
+	}
+
 	if (info->bridge_name && info->bridge_name[0]) {
 		br_if = if_lookup_by_name_per_ns(zns, info->bridge_name);
 		if (!br_if) {
@@ -627,6 +797,19 @@ static void ovs_apply_ifinfo(struct zebra_ns *zns, struct ovs_ifinfo *info)
 				ifp, br_if->ifindex, zns->ns_id,
 				ZEBRA_BRIDGE_NO_ACTION);
 		}
+	} else if (old_slave == ZEBRA_IF_SLAVE_BRIDGE &&
+		   old_bridge_ifindex != IFINDEX_INTERNAL) {
+		zebra_l2if_update_bridge_slave(ifp, IFINDEX_INTERNAL, zns->ns_id,
+					       ZEBRA_BRIDGE_NO_ACTION);
+	}
+
+	if (new_type == ZEBRA_IF_BOND) {
+		if (info->has_access_vlan)
+			zebra_evpn_vl_mbr_ref(info->access_vlan, zif);
+		else
+			zlog_warn(
+				"OVS bond %s missing zebra.access_vlan for EVPN-MH",
+				info->name);
 	}
 }
 
@@ -672,12 +855,19 @@ void zebra_ovs_interface_list(struct zebra_ns *zns)
 
 void zebra_ovs_interface_list_tunneldump(struct zebra_ns *zns)
 {
-	(void)zns;
+	if (!zebra_ovs_is_enabled())
+		return;
+
+	/* Re-scan OVS interfaces for tunnel metadata (vxlan) if needed. */
+	zebra_ovs_interface_list(zns);
 }
 
 void zebra_ovs_interface_list_second(struct zebra_ns *zns)
 {
-	(void)zns;
+	if (!zebra_ovs_is_enabled())
+		return;
+
+	zebra_if_update_all_links(zns);
 }
 
 static void ovs_apply_fdb_entry(const struct ethaddr *mac, uint32_t ofport,

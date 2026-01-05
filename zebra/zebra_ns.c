@@ -24,6 +24,7 @@
 #include "table_manager.h"
 #include "zebra_errors.h"
 #include "zebra_dplane.h"
+#include "zebra/ovs.h"
 
 extern struct zebra_privs_t zserv_privs;
 
@@ -332,7 +333,10 @@ int zebra_ns_enable(ns_id_t ns_id, void **info)
 
 	zns->ns_id = ns_id;
 
-	kernel_init(zns);
+	if (zebra_ovs_is_enabled())
+		zebra_ovs_init(zns);
+	else
+		kernel_init(zns);
 	zebra_dplane_ns_enable(zns, true);
 	interface_list(zns);
 
@@ -346,7 +350,10 @@ static int zebra_ns_disable_internal(struct zebra_ns *zns, bool complete)
 {
 	zebra_dplane_ns_enable(zns, false /*Disable*/);
 
-	kernel_terminate(zns, complete);
+	if (zebra_ovs_is_enabled())
+		zebra_ovs_terminate(zns);
+	else
+		kernel_terminate(zns, complete);
 
 	zns->ns_id = NS_DEFAULT;
 
