@@ -11,3 +11,12 @@ fdb missing ok=0 mac=- port=0
 arp v4 ok=1 ip=192.0.2.1 mac=aa:bb:cc:dd:ee:ff port=7
 arp v6 ok=1 ip=2001:db8::1 mac=01:02:03:04:05:06 port=3
 arp missing-port ok=0 ip=- mac=- port=0
+vni ok ok=1 value=5000
+vni zero ok=0 value=0
+vni bad ok=0 value=0
+vlan ok ok=1 value=100
+vlan zero ok=0 value=0
+vlan bad ok=0 value=0
+ipv4 vtep ok=1 value=192.0.2.10
+ipv4 mcast ok=1 value=239.1.1.1
+ipv4 bad ok=0 value=-
